@@ -2,28 +2,52 @@
 library(shiny)
 library(tidyverse)
 
+make_sample_distribution <- function(distribution) {
+  if (distribution == 'Exponential') { 
+    x_sample <- rexp(1000, rate=2)
+    
+  } else if (distribution == 'Normal') {
+    x_sample <- rnorm(1000)
+    
+  } else {
+    x_sample <- rpois(1000, lambda = 1)
+    
+  }
+  
+  x_sample_df <- as.data.frame(x_sample)
+  names(x_sample_df)[1] <- 'sample'
+  
+  return(x_sample_df)
+}
+
 make_distribution <- function(distribution,
                               sample_size,
                               n_iterations)
 {
-  # Fix this
-  if (distribution == 'exponential') { 
+  if (distribution == 'Exponential') { 
     x <- matrix(
       rexp(sample_size * n_iterations, rate=2),
       ncol = n_iterations
     )
+
+  } else if (distribution == 'Normal') {
+    x <- matrix(
+      rnorm(sample_size * n_iterations),
+      ncol = n_iterations
+    )
+    
   } else {
     x <- matrix(
-      rnorm(sample_size),
+      rpois(sample_size * n_iterations, lambda = 1),
       ncol = n_iterations
     )
   }
   
   x_means <- colMeans(x)
-  x_df <- as.data.frame(x_means)
-  names(x_df)[1] <- 'sample_means'
+  x_means_df <- as.data.frame(x_means)
+  names(x_means_df)[1] <- 'sample_means'
   
-  return(x_df)
+  return(x_means_df)
 }
 
 # User interface ----
@@ -37,19 +61,25 @@ ui <- fluidPage(
                                    sidebarPanel(
                                      selectInput('distribution',
                                                  'Choose distribution',
-                                                 c('Exponential', 'Normal'), selected = NULL, multiple = FALSE,
+                                                 c('Normal', 'Exponential', 'Poisson'), selected = NULL, multiple = FALSE,
                                                  selectize = TRUE, width = NULL, size = NULL),
                                      
                                      numericInput('sample_size',
-                                                  'Choose sample size',
-                                                  '1'),
+                                                  'Choose sample size for each experiment',
+                                                  '1',
+                                                  min = 1),
                                      
                                      numericInput('n_iterations',
-                                                  'Choose number of samples to draw',
+                                                  'Choose number of experiments to run',
                                                   '1000'),
+                                     
+                                     actionButton('button', 'Run experiments')
+                                     
                                    ),
                                    
-                                   mainPanel(plotOutput('sample_distribution'))
+                                   mainPanel(plotOutput('sample_distribution'),
+                                             plotOutput('sample_mean_distribution')
+                                             )
                                  )
                         )
              ),
@@ -61,37 +91,21 @@ ui <- fluidPage(
 
 # Server logic
 server <- function(input, output) {
-  
-  getSamples <- reactive({
-    make_distribution(input$distribution,
-                      input$sample_size,
-                      input$n_iterations)
+  getSampleDistribution <- reactive({
+    make_sample_distribution(input$distribution)
   })
-  
-  # iosInputIncrease <- reactive({
-  #   mau_conversion_increase(mau_data_ios,
-  #                           input$mom_one_increase,
-  #                           input$mom_six_increase,
-  #                           input$mom_twelve_increase)
-  # })
   
   output$sample_distribution <- renderPlot({
-    df <- getSamples()
-    ggplot(df, aes(sample_means)) + geom_histogram()
+    df <- getSampleDistribution()
+    ggplot(df, aes(sample)) + geom_histogram()
   })
-  
-  # output$ios_twelve_plot <- renderPlot({
-  #   df <- iosInputIncrease()
-  #   df <- df %>% filter(date >= input$dates[1] & date <= input$dates[2])
-  #   ggplot(df, aes(date, twelve_month_conversion)) +
-  #     geom_line() +
-  #     geom_point() +
-  #     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  #     theme_bw() +
-  #     labs(title = 'iOS - Twelve month conversion rate',
-  #          x = '',
-  #          y = 'MAU conversion rate')
-  # })
+
+  observeEvent(input$button, {
+    output$sample_mean_distribution <- renderPlot({
+      df <- make_distribution(input$distribution, isolate(input$sample_size), isolate(input$n_iterations))
+      ggplot(df, aes(sample_means)) + geom_histogram()
+    })
+  })
   
 }
 
